@@ -60,6 +60,7 @@ export const MediaSourceBinder = ({
       const choice = chooseMediaSource(
         { VITE_INPUT_SOURCE: env.VITE_INPUT_SOURCE, VITE_INPUT_URL: env.VITE_INPUT_URL },
         isFramed(),
+        new URLSearchParams(window.location.search).get("camera") === "webcam",
       );
 
       // The switcher is controlled and holds no source state of its own, so the

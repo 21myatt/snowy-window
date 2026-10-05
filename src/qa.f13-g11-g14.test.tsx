@@ -179,6 +179,10 @@ describe("QA-F13-G11 · a creator's configured source is never overridden", () =
     expect(chooseMediaSource({}, true)).toEqual({ kind: "framedPreset" });
   });
 
+  it("framed + explicit webcam opt-in → the webcam", () => {
+    expect(chooseMediaSource({}, true, true)).toEqual({ kind: "webcam" });
+  });
+
   it("framed + configured → the CREATOR'S source, unchanged", () => {
     // Overriding a deliberate config pointed at client footage would hide work they
     // did. Framed or not, a configured source wins.

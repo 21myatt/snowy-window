@@ -58,12 +58,12 @@ export type MediaSourceChoice =
  * the tracker running the moment the frame loads. The camera remains reachable
  * on demand, since the frame now delegates it.
  */
-export const chooseMediaSource = (env: MediaSourceEnv, framed: boolean): MediaSourceChoice => {
+export const chooseMediaSource = (env: MediaSourceEnv, framed: boolean, allowFramedWebcam = false): MediaSourceChoice => {
   if (env.VITE_INPUT_SOURCE === "video") return { kind: "video", url: env.VITE_INPUT_URL };
   if (env.VITE_INPUT_SOURCE === "photo" && env.VITE_INPUT_URL) {
     return { kind: "photo", url: env.VITE_INPUT_URL };
   }
-  if (framed) return { kind: "framedPreset" };
+  if (framed && !allowFramedWebcam) return { kind: "framedPreset" };
   return { kind: "webcam" };
 };
 

@@ -38,6 +38,10 @@ describe("chooseMediaSource", () => {
     expect(chooseMediaSource({}, true)).toEqual({ kind: "framedPreset" });
   });
 
+  it("allows an explicit framed webcam opt-in", () => {
+    expect(chooseMediaSource({}, true, true)).toEqual({ kind: "webcam" });
+  });
+
   it("unframed with no configured source selects the webcam — the shipped default, unchanged", () => {
     // A REGRESSION PIN. Every published app runs this branch; if the framing
     // check ever leaks into it, creators lose their camera on their own machine.
