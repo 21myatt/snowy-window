@@ -10,8 +10,8 @@ export const SNOWY_WINDOW_CONFIG = {
   },
   hand: {
     boundingBoxRadius: 0.13,
-    palmRadiusMultiplier: 1.25,
-    fingertipRadius: 0.055,
+    palmRadiusMultiplier: 2.25,
+    fingertipRadius: 0.15,
     singleFingerExtensionRatio: 1.12,
     brushSoftness: 0.72,
   },

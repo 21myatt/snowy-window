@@ -2,6 +2,7 @@ export type Point = { x: number; y: number };
 export type Brush = Point & { radius: number; strength: number; mode: "wipe" | "refill" };
 export type HandBounds = { minX: number; minY: number; maxX: number; maxY: number };
 export type HandGesture = "open_palm" | "closed_fist" | string | undefined;
+export type HandPoseState = "palm" | `finger:${number}` | "none";
 
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
 
@@ -38,6 +39,12 @@ export const extendedFingerIndices = (hand: Point[], ratio: number): number[] =>
   });
 };
 
+export const classifyHand = (hand: Point[], gesture: HandGesture, ratio: number): HandPoseState => {
+  if (gesture?.toLowerCase() === "open_palm") return "palm";
+  const extended = extendedFingerIndices(hand, ratio);
+  return extended.length === 1 ? `finger:${extended[0]}` : "none";
+};
+
 export const handBrushes = (
   hands: Point[][],
   gestures: HandGesture[],
@@ -46,13 +53,12 @@ export const handBrushes = (
   const result: Brush[] = hands.flatMap((hand, handIndex) => {
     const center = palmCenter(hand);
     if (!center) return [];
-    const gesture = gestures[handIndex]?.toLowerCase();
-    if (gesture === "open_palm") {
+    const state = classifyHand(hand, gestures[handIndex], config.singleFingerExtensionRatio);
+    if (state === "palm") {
       return [{ ...toUv(center), radius: config.boundingBoxRadius * config.palmRadiusMultiplier, strength: config.strength, mode: "wipe" as const }];
     }
-    const extended = extendedFingerIndices(hand, config.singleFingerExtensionRatio);
-    if (extended.length !== 1) return [];
-    const tip = hand[extended[0]];
+    if (state === "none") return [];
+    const tip = hand[Number(state.slice("finger:".length))];
     return tip ? [{ ...toUv(tip), radius: config.fingertipRadius, strength: config.strength, mode: "wipe" as const }] : [];
   });
   return result;
@@ -67,10 +73,41 @@ export const mouthBrush = (
 
 /** Object-oriented boundary for the interaction domain; React only adapts SDK data into it. */
 export class SnowyWindowInteractionEngine {
+  private readonly previous = new Map<number, { state: HandPoseState; point: Point }>();
+
   constructor(private readonly config: { boundingBoxRadius: number; palmRadiusMultiplier: number; fingertipRadius: number; singleFingerExtensionRatio: number; strength: number }) {}
 
   createHandBrushes(hands: Point[][], gestures: HandGesture[]): Brush[] {
-    return handBrushes(hands, gestures, this.config);
+    const brushes: Brush[] = [];
+    hands.forEach((hand, handIndex) => {
+      const center = palmCenter(hand);
+      const state = classifyHand(hand, gestures[handIndex], this.config.singleFingerExtensionRatio);
+      if (!center || state === "none") {
+        this.previous.delete(handIndex);
+        return;
+      }
+      const current = handBrushes([hand], [gestures[handIndex]], this.config)[0];
+      if (!current) {
+        this.previous.delete(handIndex);
+        return;
+      }
+      const previous = this.previous.get(handIndex);
+      if (previous && previous.state === state) {
+        const distanceBetween = Math.hypot(current.x - previous.point.x, current.y - previous.point.y);
+        const steps = Math.max(1, Math.ceil(distanceBetween / Math.max(current.radius * 0.6, 0.002)));
+        for (let step = 1; step <= steps; step += 1) {
+          const amount = step / steps;
+          brushes.push({ ...current, x: previous.point.x + (current.x - previous.point.x) * amount, y: previous.point.y + (current.y - previous.point.y) * amount });
+        }
+      } else {
+        brushes.push(current);
+      }
+      this.previous.set(handIndex, { state, point: { x: current.x, y: current.y } });
+    });
+    Array.from(this.previous.keys()).forEach((index) => {
+      if (index >= hands.length) this.previous.delete(index);
+    });
+    return brushes;
   }
 
   // The class owns both interaction paths; this method intentionally delegates

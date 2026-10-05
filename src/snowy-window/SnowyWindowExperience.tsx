@@ -6,7 +6,7 @@ import { useFaceInfo, getFaceBlendshape, FACE_LANDMARK_INDICES, FaceTracker, Han
 import { useXRModelNode, type XRModelNodeHandTracking } from "@vincentt-xr/sdk/low-level";
 import { Vector4 } from "three";
 import { SNOWY_WINDOW_CONFIG } from "./snowyWindowConfig";
-import { SnowyWindowInteractionEngine, type Brush, type Point } from "./SnowyWindowInteraction";
+import { SnowyWindowInteractionEngine, type Brush } from "./SnowyWindowInteraction";
 import { snowyWindowFragmentShader, snowyWindowVertexShader } from "./SnowyWindowShader";
 import { CondensationMaskSimulation } from "./CondensationMaskSimulation";
 
@@ -31,10 +31,8 @@ export const SnowyWindowExperience = () => {
       points: hand.coordinates,
       gesture: hand.gesture,
       handedness: hand.handedness,
-    }));
-    const hands = trackedHands
-      .map((hand) => hand.points?.map(({ x, y }) => ({ x, y })))
-      .filter((hand): hand is Point[] => Boolean(hand));
+    })).filter((hand) => hand.points && hand.points.length >= 21);
+    const hands = trackedHands.map((hand) => hand.points!.map(({ x, y }) => ({ x, y })));
     const currentFace = faceRef.current;
     const mouthIndex = FACE_LANDMARK_INDICES["face.mouthCenter"];
     const mouthPoint = currentFace?.landmarks[mouthIndex];

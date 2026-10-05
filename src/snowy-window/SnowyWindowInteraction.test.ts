@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extendedFingerIndices, handBrushes, mouthBrush, palmCenter, toUv } from "./SnowyWindowInteraction";
+import { extendedFingerIndices, handBrushes, mouthBrush, palmCenter, SnowyWindowInteractionEngine, toUv } from "./SnowyWindowInteraction";
 
 describe("snowy window interaction mapping", () => {
   it("converts top-left tracking coordinates to shader UV coordinates", () => {
@@ -41,6 +41,19 @@ describe("snowy window interaction mapping", () => {
       boundingBoxRadius: 0.13, palmRadiusMultiplier: 1.25, fingertipRadius: 0.05,
       singleFingerExtensionRatio: 1.12, strength: -1,
     })).toHaveLength(0);
+  });
+
+  it("interpolates a continuous trail while the same hand state moves", () => {
+    const engine = new SnowyWindowInteractionEngine({
+      boundingBoxRadius: 0.13, palmRadiusMultiplier: 1.25, fingertipRadius: 0.05,
+      singleFingerExtensionRatio: 1.12, strength: -1,
+    });
+    const first = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
+    first[8] = { x: 0, y: 1 }; first[6] = { x: 0, y: 0.5 };
+    const second = first.map((point) => ({ ...point }));
+    second[8] = { x: 1, y: 1 };
+    expect(engine.createHandBrushes([first], ["closed_fist"])).toHaveLength(1);
+    expect(engine.createHandBrushes([second], ["closed_fist"]).length).toBeGreaterThan(1);
   });
 
   it("centers the palm brush on wrist and MCP joints, not fingertip extension", () => {
