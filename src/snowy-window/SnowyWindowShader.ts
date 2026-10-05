@@ -15,6 +15,7 @@ export const snowyWindowFragmentShader = `
   uniform float uNoiseScale;
   uniform float uWipeStrength;
   uniform float uMouthStrength;
+  uniform sampler2D uMask;
   uniform int uBrushCount;
   uniform vec4 uBrushes[32]; // x, y, radius, signed strength
 
@@ -43,8 +44,9 @@ export const snowyWindowFragmentShader = `
     float organic = noise(p * uNoiseScale + vec2(uTime * 0.018, -uTime * 0.012));
     float cells = noise(p * 7.0 - vec2(uTime * 0.006));
     float growth = condensationSeeds(p, uTime * (uGrowthSpeed / 0.035));
-    float density = clamp(uInitialDensity * 0.72 + growth * 0.42 +
-      (organic * 0.32 + cells * 0.16 - 0.18) * (1.0 - exp(-uTime * uGrowthSpeed)), 0.0, 1.0);
+    float mask = texture2D(uMask, p).r;
+    float density = clamp(mask * 0.78 + growth * 0.22 +
+      (organic * 0.12 + cells * 0.08) * (1.0 - exp(-uTime * uGrowthSpeed)), 0.0, 1.0);
     for (int i = 0; i < 32; i++) {
       if (i >= uBrushCount) break;
       vec4 brush = uBrushes[i];

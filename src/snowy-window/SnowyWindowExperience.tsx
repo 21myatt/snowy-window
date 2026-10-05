@@ -1,5 +1,5 @@
 /* eslint-disable react/no-unknown-property */
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { ScreenSpaceUI, ScreenTransform, XRModel } from "@vincentt-xr/sdk";
 import { useFaceInfo, getFaceBlendshape, FACE_LANDMARK_INDICES, FaceTracker, HandTracker } from "@vincentt-xr/sdk/tracking";
@@ -8,23 +8,33 @@ import { Vector4 } from "three";
 import { SNOWY_WINDOW_CONFIG } from "./snowyWindowConfig";
 import { SnowyWindowInteractionEngine, type Brush, type Point } from "./SnowyWindowInteraction";
 import { snowyWindowFragmentShader, snowyWindowVertexShader } from "./SnowyWindowShader";
+import { CondensationMaskSimulation } from "./CondensationMaskSimulation";
 
 const MAX_BRUSHES = 32;
 
 export const SnowyWindowExperience = () => {
   const materialRef = useRef<any>(null);
-  const handModel = useXRModel<{ coordinates?: { left?: Point[]; right?: Point[] } }>(XRModel.HAND_TRACKER, { targetFps: SNOWY_WINDOW_CONFIG.tracking.targetFps });
+  const handModel = useXRModel<{ coordinates?: { left?: Point[]; right?: Point[] }; gesture?: { left?: string; right?: string } }>(XRModel.HAND_TRACKER, { targetFps: SNOWY_WINDOW_CONFIG.tracking.targetFps });
   const face = useFaceInfo({ targetFps: SNOWY_WINDOW_CONFIG.tracking.targetFps, holdMs: 180 });
   const faceRef = useRef(face); faceRef.current = face;
   const interactionEngine = useRef(new SnowyWindowInteractionEngine({
     ...SNOWY_WINDOW_CONFIG.hand,
     strength: -SNOWY_WINDOW_CONFIG.condensation.wipeStrength,
   })).current;
+  const simulation = useMemo(() => new CondensationMaskSimulation(SNOWY_WINDOW_CONFIG.condensation.initialDensity), []);
+  const lastDebugLog = useRef(0);
   useFrame(({ clock }) => {
     const material = materialRef.current;
     if (!material) return;
     const model = handModel.node;
-    const hands = [model?.coordinates?.left, model?.coordinates?.right].filter((hand): hand is Point[] => Boolean(hand));
+    const trackedHands = [
+      { points: model?.coordinates?.left, gesture: model?.gesture?.left },
+      { points: model?.coordinates?.right, gesture: model?.gesture?.right },
+    ];
+    const hands = trackedHands
+      .filter((hand) => hand.gesture?.toLowerCase() === "open_palm")
+      .map((hand) => hand.points)
+      .filter((hand): hand is Point[] => Boolean(hand));
     const bounds = hands.map((hand) => ({ minX: Math.min(...hand.map((p) => p.x)), minY: Math.min(...hand.map((p) => p.y)), maxX: Math.max(...hand.map((p) => p.x)), maxY: Math.max(...hand.map((p) => p.y)) }));
     const currentFace = faceRef.current;
     const mouthIndex = FACE_LANDMARK_INDICES["face.mouthCenter"];
@@ -34,6 +44,22 @@ export const SnowyWindowExperience = () => {
       ...interactionEngine.createHandBrushes(hands, bounds),
       ...interactionEngine.createMouthBrush(mouthPoint ?? null, open, SNOWY_WINDOW_CONFIG.mouth.refillRadius, SNOWY_WINDOW_CONFIG.condensation.mouthRefillStrength),
     ].slice(0, MAX_BRUSHES);
+    simulation.update(1 / SNOWY_WINDOW_CONFIG.tracking.targetFps, clock.elapsedTime, brushes, {
+      growthSpeed: SNOWY_WINDOW_CONFIG.condensation.growthSpeed,
+      wipeStrength: SNOWY_WINDOW_CONFIG.condensation.wipeStrength,
+      mouthRefillStrength: SNOWY_WINDOW_CONFIG.condensation.mouthRefillStrength,
+    });
+    if (clock.elapsedTime - lastDebugLog.current >= 0.5) {
+      lastDebugLog.current = clock.elapsedTime;
+      // Required runtime diagnostics; throttled to two messages per second.
+      // eslint-disable-next-line no-console
+      console.log("[snowy-window] tracking", {
+        palmHands: hands.length,
+        palmStates: trackedHands.map((hand) => hand.gesture ?? "none"),
+        secondFingertip: hands.map((hand) => hand[8] ?? null),
+        mouthOpen: open,
+      });
+    }
     material.uniforms.uTime.value = clock.elapsedTime;
     material.uniforms.uBrushCount.value = brushes.length;
     brushes.forEach((brush, index) => material.uniforms.uBrushes.value[index].set(brush.x, brush.y, brush.radius, brush.mode === "wipe" ? brush.strength : Math.abs(brush.strength)));
@@ -53,6 +79,7 @@ export const SnowyWindowExperience = () => {
               uGrowthSpeed: { value: SNOWY_WINDOW_CONFIG.condensation.growthSpeed }, uNoiseScale: { value: SNOWY_WINDOW_CONFIG.condensation.noiseScale },
               uWipeStrength: { value: SNOWY_WINDOW_CONFIG.condensation.wipeStrength }, uMouthStrength: { value: SNOWY_WINDOW_CONFIG.condensation.mouthRefillStrength },
               uBrushCount: { value: 0 }, uBrushes: { value: Array.from({ length: MAX_BRUSHES }, () => new Vector4()) },
+              uMask: { value: simulation.texture },
             }}
             vertexShader={snowyWindowVertexShader}
             fragmentShader={snowyWindowFragmentShader}
