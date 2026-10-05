@@ -32,6 +32,11 @@
     "src/Scene.tsx",
     "src/FaceBoundingBox.tsx",
     "src/FooterHud.tsx",
-    "src/HandBoundingBox.tsx"
+    "src/HandBoundingBox.tsx",
+    "src/snowy-window/SnowyWindowExperience.tsx",
+    "src/snowy-window/SnowyWindowInteraction.test.ts",
+    "src/snowy-window/SnowyWindowInteraction.ts",
+    "src/snowy-window/SnowyWindowShader.ts",
+    "src/snowy-window/snowyWindowConfig.ts"
   ]
 }
