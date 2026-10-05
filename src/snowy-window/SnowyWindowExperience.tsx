@@ -6,7 +6,7 @@ import { useFaceInfo, getFaceBlendshape, FACE_LANDMARK_INDICES, FaceTracker, Han
 import { useXRModel } from "@vincentt-xr/sdk/low-level";
 import { Vector4 } from "three";
 import { SNOWY_WINDOW_CONFIG } from "./snowyWindowConfig";
-import { handBrushes, mouthBrush, type Brush, type Point } from "./SnowyWindowInteraction";
+import { SnowyWindowInteractionEngine, type Brush, type Point } from "./SnowyWindowInteraction";
 import { snowyWindowFragmentShader, snowyWindowVertexShader } from "./SnowyWindowShader";
 
 const MAX_BRUSHES = 32;
@@ -16,6 +16,10 @@ export const SnowyWindowExperience = () => {
   const handModel = useXRModel<{ coordinates?: { left?: Point[]; right?: Point[] } }>(XRModel.HAND_TRACKER, { targetFps: SNOWY_WINDOW_CONFIG.tracking.targetFps });
   const face = useFaceInfo({ targetFps: SNOWY_WINDOW_CONFIG.tracking.targetFps, holdMs: 180 });
   const faceRef = useRef(face); faceRef.current = face;
+  const interactionEngine = useRef(new SnowyWindowInteractionEngine({
+    ...SNOWY_WINDOW_CONFIG.hand,
+    strength: -SNOWY_WINDOW_CONFIG.condensation.wipeStrength,
+  })).current;
   useFrame(({ clock }) => {
     const material = materialRef.current;
     if (!material) return;
@@ -27,8 +31,8 @@ export const SnowyWindowExperience = () => {
     const mouthPoint = currentFace?.landmarks[mouthIndex];
     const open = Boolean(currentFace && getFaceBlendshape(currentFace, "jawOpen") >= SNOWY_WINDOW_CONFIG.mouth.jawOpenThreshold);
     const brushes: Brush[] = [
-      ...handBrushes(hands, bounds, { ...SNOWY_WINDOW_CONFIG.hand, strength: -SNOWY_WINDOW_CONFIG.condensation.wipeStrength }),
-      ...mouthBrush(mouthPoint ?? null, open, SNOWY_WINDOW_CONFIG.mouth.refillRadius, SNOWY_WINDOW_CONFIG.condensation.mouthRefillStrength),
+      ...interactionEngine.createHandBrushes(hands, bounds),
+      ...interactionEngine.createMouthBrush(mouthPoint ?? null, open, SNOWY_WINDOW_CONFIG.mouth.refillRadius, SNOWY_WINDOW_CONFIG.condensation.mouthRefillStrength),
     ].slice(0, MAX_BRUSHES);
     material.uniforms.uTime.value = clock.elapsedTime;
     material.uniforms.uBrushCount.value = brushes.length;

@@ -1,5 +1,6 @@
 export type Point = { x: number; y: number };
 export type Brush = Point & { radius: number; strength: number; mode: "wipe" | "refill" };
+export type HandBounds = { minX: number; minY: number; maxX: number; maxY: number };
 
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
 
@@ -33,3 +34,19 @@ export const mouthBrush = (
   radius: number,
   strength: number,
 ): Brush[] => (mouth && open ? [{ ...toUv(mouth), radius, strength, mode: "refill" }] : []);
+
+/** Object-oriented boundary for the interaction domain; React only adapts SDK data into it. */
+export class SnowyWindowInteractionEngine {
+  constructor(private readonly config: { boundingBoxRadius: number; fingertipRadius: number; strength: number }) {}
+
+  createHandBrushes(hands: Point[][], bounds: HandBounds[]): Brush[] {
+    return handBrushes(hands, bounds, this.config);
+  }
+
+  // The class owns both interaction paths; this method intentionally delegates
+  // to the stateless mouth mapping while preserving one feature boundary.
+  // eslint-disable-next-line class-methods-use-this
+  createMouthBrush(mouth: Point | null, open: boolean, radius: number, strength: number): Brush[] {
+    return mouthBrush(mouth, open, radius, strength);
+  }
+}
