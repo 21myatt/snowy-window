@@ -7,20 +7,40 @@ const clamp = (value: number) => Math.min(1, Math.max(0, value));
 /** SDK tracking coordinates are normalized to -1..1 with +y up. */
 export const toUv = (point: Point): Point => ({
   x: clamp((point.x + 1) / 2),
-  y: clamp((1 - point.y) / 2),
+  // Shader UVs have their origin at the bottom; the SDK hand point uses NDC
+  // with +y up, so this keeps the tracked point visually aligned.
+  y: clamp((point.y + 1) / 2),
 });
+
+export const palmCenter = (hand: Point[]): Point | null => {
+  const palmPoints = [hand[0], hand[5], hand[9], hand[13], hand[17]].filter(
+    (point): point is Point => Boolean(point),
+  );
+  if (palmPoints.length === 0) return null;
+  return {
+    x: palmPoints.reduce((sum, point) => sum + point.x, 0) / palmPoints.length,
+    y: palmPoints.reduce((sum, point) => sum + point.y, 0) / palmPoints.length,
+  };
+};
 
 export const handBrushes = (
   hands: Point[][],
   bounds: Array<{ minX: number; minY: number; maxX: number; maxY: number }>,
   config: { boundingBoxRadius: number; fingertipRadius: number; strength: number },
 ): Brush[] => {
-  const result: Brush[] = bounds.map((box) => ({
-    ...toUv({ x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }),
-    radius: config.boundingBoxRadius,
-    strength: config.strength,
-    mode: "wipe",
-  }));
+  const result: Brush[] = hands.flatMap((hand, handIndex) => {
+    const center = palmCenter(hand);
+    if (!center) return [];
+    // The bounds keep the broad brush tied to the detected hand; the center is
+    // deliberately computed from palm joints so extended fingers cannot pull it.
+    const box = bounds[handIndex];
+    return [{
+      ...toUv(center),
+      radius: config.boundingBoxRadius * (box ? 1 : 0.8),
+      strength: config.strength,
+      mode: "wipe" as const,
+    }];
+  });
   hands.forEach((hand) => {
     // Only the second fingertip in the brief: MediaPipe index-finger tip = 8.
     const secondFingertip = hand[8];

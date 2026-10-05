@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { handBrushes, mouthBrush, toUv } from "./SnowyWindowInteraction";
+import { handBrushes, mouthBrush, palmCenter, toUv } from "./SnowyWindowInteraction";
 
 describe("snowy window interaction mapping", () => {
   it("converts top-left tracking coordinates to shader UV coordinates", () => {
-    expect(toUv({ x: -0.5, y: 0.2 })).toEqual({ x: 0.25, y: 0.4 });
-    expect(toUv({ x: -1, y: 2 })).toEqual({ x: 0, y: 0 });
+    expect(toUv({ x: -0.5, y: 0.2 })).toEqual({ x: 0.25, y: 0.6 });
+    expect(toUv({ x: -1, y: 2 })).toEqual({ x: 0, y: 1 });
   });
 
   it("creates one broad palm wipe and one second-fingertip wipe per hand", () => {
@@ -16,6 +16,15 @@ describe("snowy window interaction mapping", () => {
     });
     expect(brushes).toHaveLength(2);
     expect(brushes.every((brush) => brush.mode === "wipe")).toBe(true);
+  });
+
+  it("centers the palm brush on wrist and MCP joints, not fingertip extension", () => {
+    const hand = Array.from({ length: 21 }, () => ({ x: 0.8, y: 0.8 }));
+    hand[0] = { x: -0.2, y: -0.2 };
+    [5, 9, 13, 17].forEach((index) => { hand[index] = { x: -0.1, y: -0.1 }; });
+    const center = palmCenter(hand);
+    expect(center?.x).toBeCloseTo(-0.12);
+    expect(center?.y).toBeCloseTo(-0.12);
   });
 
   it("refills only while the mouth is open and a mouth point exists", () => {
