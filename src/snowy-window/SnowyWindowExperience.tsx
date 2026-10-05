@@ -22,7 +22,6 @@ export const SnowyWindowExperience = () => {
     strength: -SNOWY_WINDOW_CONFIG.condensation.wipeStrength,
   })).current;
   const simulation = useMemo(() => new CondensationMaskSimulation(SNOWY_WINDOW_CONFIG.condensation.initialDensity), []);
-  const lastDebugLog = useRef(0);
   useFrame(({ clock }) => {
     const material = materialRef.current;
     if (!material) return;
@@ -46,17 +45,6 @@ export const SnowyWindowExperience = () => {
       wipeStrength: SNOWY_WINDOW_CONFIG.condensation.wipeStrength,
       mouthRefillStrength: SNOWY_WINDOW_CONFIG.condensation.mouthRefillStrength,
     });
-    if (clock.elapsedTime - lastDebugLog.current >= 0.5) {
-      lastDebugLog.current = clock.elapsedTime;
-      // Required runtime diagnostics; throttled to two messages per second.
-      // eslint-disable-next-line no-console
-      console.log("[snowy-window] tracking", {
-        palmHands: trackedHands.filter((hand) => hand.gesture?.toLowerCase() === "open_palm").length,
-        palmStates: trackedHands.map((hand) => ({ handedness: hand.handedness ?? "unknown", gesture: hand.gesture ?? "none" })),
-        secondFingertip: hands.map((hand) => hand[8] ?? null),
-        mouthOpen: open,
-      });
-    }
     material.uniforms.uTime.value = clock.elapsedTime;
     material.uniforms.uBrushCount.value = brushes.length;
     brushes.forEach((brush, index) => material.uniforms.uBrushes.value[index].set(brush.x, brush.y, brush.radius, brush.mode === "wipe" ? brush.strength : Math.abs(brush.strength)));
