@@ -10,15 +10,18 @@
 // itself the error. Disabling at the config keeps the suppression true in both
 // states.
 import { lazy, Suspense } from "react";
-import { FooterHud } from "./FooterHud";
 
-const SnowyWindowExperience = lazy(() => import("./snowy-window/SnowyWindowExperience").then((module) => ({ default: module.SnowyWindowExperience })));
+const SnowyWindowExperience = lazy(() =>
+  import("./snowy-window/SnowyWindowExperience").then((module) => ({
+    default: module.SnowyWindowExperience,
+  })),
+);
 
 export const Scene = () => (
   <>
     <Suspense fallback={null}>
       <SnowyWindowExperience />
     </Suspense>
-    <FooterHud />
+    {/* <FooterHud /> */}
   </>
 );
