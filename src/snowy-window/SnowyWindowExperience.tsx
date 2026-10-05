@@ -3,7 +3,7 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { ScreenSpaceUI, ScreenTransform, XRModel } from "@vincentt-xr/sdk";
 import { useFaceInfo, getFaceBlendshape, FACE_LANDMARK_INDICES, FaceTracker, HandTracker } from "@vincentt-xr/sdk/tracking";
-import { useXRModel } from "@vincentt-xr/sdk/low-level";
+import { useXRModelNode, type XRModelNodeHandTracking } from "@vincentt-xr/sdk/low-level";
 import { Vector4 } from "three";
 import { SNOWY_WINDOW_CONFIG } from "./snowyWindowConfig";
 import { SnowyWindowInteractionEngine, type Brush, type Point } from "./SnowyWindowInteraction";
@@ -14,7 +14,7 @@ const MAX_BRUSHES = 32;
 
 export const SnowyWindowExperience = () => {
   const materialRef = useRef<any>(null);
-  const handModel = useXRModel<{ coordinates?: { left?: Point[]; right?: Point[] }; gesture?: { left?: string; right?: string } }>(XRModel.HAND_TRACKER, { targetFps: SNOWY_WINDOW_CONFIG.tracking.targetFps });
+  const handModel = useXRModelNode<XRModelNodeHandTracking>(XRModel.HAND_TRACKER);
   const face = useFaceInfo({ targetFps: SNOWY_WINDOW_CONFIG.tracking.targetFps, holdMs: 180 });
   const faceRef = useRef(face); faceRef.current = face;
   const interactionEngine = useRef(new SnowyWindowInteractionEngine({
@@ -26,14 +26,15 @@ export const SnowyWindowExperience = () => {
   useFrame(({ clock }) => {
     const material = materialRef.current;
     if (!material) return;
-    const model = handModel.node;
-    const trackedHands = [
-      { points: model?.coordinates?.left, gesture: model?.gesture?.left },
-      { points: model?.coordinates?.right, gesture: model?.gesture?.right },
-    ];
+    const model = handModel;
+    const trackedHands = (model?.hands ?? []).map((hand) => ({
+      points: hand.coordinates,
+      gesture: hand.gesture,
+      handedness: hand.handedness,
+    }));
     const hands = trackedHands
       .filter((hand) => hand.gesture?.toLowerCase() === "open_palm")
-      .map((hand) => hand.points)
+      .map((hand) => hand.points?.map(({ x, y }) => ({ x, y })))
       .filter((hand): hand is Point[] => Boolean(hand));
     const bounds = hands.map((hand) => ({ minX: Math.min(...hand.map((p) => p.x)), minY: Math.min(...hand.map((p) => p.y)), maxX: Math.max(...hand.map((p) => p.x)), maxY: Math.max(...hand.map((p) => p.y)) }));
     const currentFace = faceRef.current;
@@ -55,7 +56,7 @@ export const SnowyWindowExperience = () => {
       // eslint-disable-next-line no-console
       console.log("[snowy-window] tracking", {
         palmHands: hands.length,
-        palmStates: trackedHands.map((hand) => hand.gesture ?? "none"),
+        palmStates: trackedHands.map((hand) => ({ handedness: hand.handedness ?? "unknown", gesture: hand.gesture ?? "none" })),
         secondFingertip: hands.map((hand) => hand[8] ?? null),
         mouthOpen: open,
       });
