@@ -1,5 +1,5 @@
 export type Point = { x: number; y: number };
-export type Brush = Point & { radius: number; strength: number; mode: "wipe" | "refill" };
+export type Brush = Point & { radius: number; strength: number; mode: "wipe" | "refill"; velocity?: Point };
 export type HandBounds = { minX: number; minY: number; maxX: number; maxY: number };
 export type HandGesture = "open_palm" | "closed_fist" | string | undefined;
 export type HandPoseState = "palm" | `finger:${number}` | "none";
@@ -12,6 +12,12 @@ export const toUv = (point: Point): Point => ({
   // Shader UVs have their origin at the bottom; the SDK hand point uses NDC
   // with +y up, so this keeps the tracked point visually aligned.
   y: clamp((point.y + 1) / 2),
+});
+
+/** Face landmarks are normalized 0..1 with a top-left origin. */
+export const faceToUv = (point: Point): Point => ({
+  x: clamp(point.x),
+  y: clamp(1 - point.y),
 });
 
 export const palmCenter = (hand: Point[]): Point | null => {
@@ -48,7 +54,7 @@ export const classifyHand = (hand: Point[], gesture: HandGesture, ratio: number)
 export const handBrushes = (
   hands: Point[][],
   gestures: HandGesture[],
-  config: { boundingBoxRadius: number; palmRadiusMultiplier: number; fingertipRadius: number; singleFingerExtensionRatio: number; strength: number },
+  config: { boundingBoxRadius: number; palmRadiusMultiplier: number; fingertipRadius: number; singleFingerExtensionRatio: number; strength: number; brushSoftness?: number },
 ): Brush[] => {
   const result: Brush[] = hands.flatMap((hand, handIndex) => {
     const center = palmCenter(hand);
@@ -69,13 +75,13 @@ export const mouthBrush = (
   open: boolean,
   radius: number,
   strength: number,
-): Brush[] => (mouth && open ? [{ ...toUv(mouth), radius, strength, mode: "refill" }] : []);
+): Brush[] => (mouth && open ? [{ ...faceToUv(mouth), radius, strength, mode: "refill" }] : []);
 
 /** Object-oriented boundary for the interaction domain; React only adapts SDK data into it. */
 export class SnowyWindowInteractionEngine {
   private readonly previous = new Map<number, { state: HandPoseState; point: Point }>();
 
-  constructor(private readonly config: { boundingBoxRadius: number; palmRadiusMultiplier: number; fingertipRadius: number; singleFingerExtensionRatio: number; strength: number }) {}
+  constructor(private readonly config: { boundingBoxRadius: number; palmRadiusMultiplier: number; fingertipRadius: number; singleFingerExtensionRatio: number; strength: number; brushSoftness?: number }) {}
 
   createHandBrushes(hands: Point[][], gestures: HandGesture[]): Brush[] {
     const brushes: Brush[] = [];
@@ -95,9 +101,10 @@ export class SnowyWindowInteractionEngine {
       if (previous && previous.state === state) {
         const distanceBetween = Math.hypot(current.x - previous.point.x, current.y - previous.point.y);
         const steps = Math.max(1, Math.ceil(distanceBetween / Math.max(current.radius * 0.6, 0.002)));
+        const velocity = { x: current.x - previous.point.x, y: current.y - previous.point.y };
         for (let step = 1; step <= steps; step += 1) {
           const amount = step / steps;
-          brushes.push({ ...current, x: previous.point.x + (current.x - previous.point.x) * amount, y: previous.point.y + (current.y - previous.point.y) * amount });
+          brushes.push({ ...current, x: previous.point.x + velocity.x * amount, y: previous.point.y + velocity.y * amount, velocity });
         }
       } else {
         brushes.push(current);

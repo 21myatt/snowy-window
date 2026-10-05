@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { extendedFingerIndices, handBrushes, mouthBrush, palmCenter, SnowyWindowInteractionEngine, toUv } from "./SnowyWindowInteraction";
+import { extendedFingerIndices, faceToUv, handBrushes, mouthBrush, palmCenter, SnowyWindowInteractionEngine, toUv } from "./SnowyWindowInteraction";
 
 describe("snowy window interaction mapping", () => {
   it("converts top-left tracking coordinates to shader UV coordinates", () => {
     expect(toUv({ x: -0.5, y: 0.2 })).toEqual({ x: 0.25, y: 0.6 });
     expect(toUv({ x: -1, y: 2 })).toEqual({ x: 0, y: 1 });
+  });
+
+  it("converts face landmarks from top-left normalized space to bottom-left UV space", () => {
+    expect(faceToUv({ x: 0.25, y: 0.2 })).toEqual({ x: 0.25, y: 0.8 });
+    expect(faceToUv({ x: 0.5, y: 0.5 })).toEqual({ x: 0.5, y: 0.5 });
   });
 
   it("creates one broad palm wipe and one second-fingertip wipe per hand", () => {

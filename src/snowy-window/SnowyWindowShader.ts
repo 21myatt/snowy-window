@@ -10,52 +10,102 @@ export const snowyWindowFragmentShader = `
   precision highp float;
   varying vec2 vUv;
   uniform float uTime;
-  uniform float uInitialDensity;
-  uniform float uGrowthSpeed;
   uniform float uNoiseScale;
-  uniform float uWipeStrength;
-  uniform float uMouthStrength;
+  uniform float uDriftSpeed;
+  uniform float uFilmOpacity;
+  uniform float uDropletOpacity;
+  uniform float uDropletScale;
+  uniform float uDropletStretch;
+  uniform float uEdgeStrength;
+  uniform float uHighlightStrength;
+  uniform float uReflectionStrength;
+  uniform float uGravity;
+  uniform float uTrailStrength;
+  uniform vec2 uResolution;
   uniform sampler2D uMask;
-  uniform int uBrushCount;
-  uniform vec4 uBrushes[32]; // x, y, radius, signed strength
+  uniform vec4 uFrostBloom;
+  uniform float uFrostBloomStrength;
 
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
   }
+
   float noise(vec2 p) {
-    vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
       mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0)), f.x), f.y);
   }
-  float condensationSeeds(vec2 p, float time) {
-    float spread = 1.0 - exp(-time * 0.035);
-    float field = 0.0;
-    // Stable hash-derived points read as random condensation nuclei and expand slowly.
-    for (int i = 0; i < 7; i++) {
-      float fi = float(i);
-      vec2 seed = vec2(hash(vec2(fi + 2.1, 8.7)), hash(vec2(fi + 17.3, 3.4)));
-      float radius = mix(0.025, 0.72, spread) * (0.55 + hash(vec2(fi, 44.0)) * 0.45);
-      field = max(field, 1.0 - smoothstep(radius, radius * 0.35, distance(p, seed)));
+
+  float fbm(vec2 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    for (int i = 0; i < 5; i++) {
+      value += noise(p) * amplitude;
+      p = p * 2.03 + vec2(17.3, 9.1);
+      amplitude *= 0.5;
     }
-    return field;
+    return value;
   }
+
   void main() {
     vec2 p = vUv;
-    float organic = noise(p * uNoiseScale + vec2(uTime * 0.018, -uTime * 0.012));
-    float cells = noise(p * 7.0 - vec2(uTime * 0.006));
-    float growth = condensationSeeds(p, uTime * (uGrowthSpeed / 0.035));
-    float mask = texture2D(uMask, p).r;
-    float density = clamp(mask * 0.78 + growth * 0.22 +
-      (organic * 0.12 + cells * 0.08) * (1.0 - exp(-uTime * uGrowthSpeed)), 0.0, 1.0);
-    for (int i = 0; i < 32; i++) {
-      if (i >= uBrushCount) break;
-      vec4 brush = uBrushes[i];
-      float distanceToBrush = distance(p, brush.xy);
-      float influence = 1.0 - smoothstep(brush.z * 0.25, brush.z, distanceToBrush);
-      density += influence * brush.w;
-    }
-    density = clamp(density, 0.0, 1.0);
-    vec3 fog = mix(vec3(0.88, 0.94, 0.96), vec3(1.0), organic * 0.35);
-    gl_FragColor = vec4(fog, density * 0.88);
+    vec4 maskSample = texture2D(uMask, p);
+    float condensation = maskSample.r;
+    float wetResidue = maskSample.g;
+    float bloomAge = uTime - uFrostBloom.z;
+    float bloomActive = step(0.0, bloomAge) * (1.0 - smoothstep(0.55, 0.7, bloomAge)) * uFrostBloomStrength;
+    float bloomDistance = distance(p, uFrostBloom.xy);
+    float bloomRadius = bloomAge * 0.42;
+    float bloomNoise = fbm(p * 42.0 + vec2(uFrostBloom.z * 0.7, -uFrostBloom.z * 0.4));
+    float bloomCircle = 1.0 - smoothstep(uFrostBloom.w * 0.72, uFrostBloom.w, bloomDistance);
+    float bloomTexture = smoothstep(0.42, 0.74, bloomNoise + bloomAge * 0.18);
+    float bloomRing = (1.0 - smoothstep(0.0, 0.035, abs(bloomDistance - bloomRadius)))
+      * smoothstep(0.0, 0.08, bloomAge)
+      * (1.0 - smoothstep(0.18, 0.42, bloomAge));
+    float frostBloom = bloomCircle * bloomTexture * bloomActive * 0.28 + bloomRing * bloomActive;
+    float large = fbm(p * uNoiseScale);
+    float medium = fbm(p * uDropletScale * 0.42);
+    float fine = fbm(vec2(p.x * uDropletScale, p.y * uDropletScale * uDropletStretch));
+    float filmNoise = large * 0.55 + medium * 0.30 + fine * 0.15;
+    float film = condensation * smoothstep(0.10, 0.72, filmNoise + condensation * 0.35);
+    float droplets = condensation * smoothstep(0.48, 0.73, fine + medium * 0.28 + condensation * 0.34);
+
+    float movers = smoothstep(0.76, 0.96, noise(p * uDropletScale * 0.7));
+    vec2 trailUv = p + vec2(0.0, -uTime * uDriftSpeed * movers * (0.5 + uGravity));
+    float trailNoise = fbm(vec2(trailUv.x * uDropletScale * 0.75, trailUv.y * uDropletScale * 1.8));
+    float trails = smoothstep(0.70, 0.92, trailNoise) * droplets * movers * uTrailStrength;
+    droplets = clamp(droplets + trails * condensation, 0.0, 1.0);
+
+    vec2 texel = 1.0 / uResolution;
+    float left = texture2D(uMask, p - vec2(texel.x, 0.0)).r;
+    float right = texture2D(uMask, p + vec2(texel.x, 0.0)).r;
+    float down = texture2D(uMask, p - vec2(0.0, texel.y)).r;
+    float up = texture2D(uMask, p + vec2(0.0, texel.y)).r;
+    vec2 gradient = vec2(right - left, up - down);
+    vec3 normal = normalize(vec3(-gradient * 2.0, 1.0));
+    vec3 lightDirection = normalize(vec3(-0.38, 0.58, 1.0));
+    float specular = pow(max(dot(normal, lightDirection), 0.0), 28.0);
+    float edge = smoothstep(0.015, 0.14, length(gradient));
+    float fresnel = pow(1.0 - max(normal.z, 0.0), 3.0);
+
+    vec3 clearGlass = vec3(0.78, 0.88, 0.92);
+    vec3 filmColor = mix(vec3(0.72, 0.84, 0.89), vec3(0.98, 1.0, 1.0), filmNoise);
+    vec3 dropletColor = vec3(0.82, 0.92, 0.96);
+    dropletColor += specular * uHighlightStrength * vec3(0.75, 0.9, 1.0);
+    dropletColor -= edge * uEdgeStrength * vec3(0.10, 0.14, 0.16);
+    vec3 reflection = mix(vec3(0.48, 0.62, 0.72), vec3(0.96, 0.99, 1.0), p.y);
+    reflection *= (0.15 + fresnel) * uReflectionStrength;
+    vec3 wetHighlight = vec3(0.72, 0.86, 0.92) * wetResidue * (0.25 + specular * 0.75);
+
+    vec3 color = clearGlass;
+    color = mix(color, filmColor, film * uFilmOpacity);
+    color = mix(color, dropletColor, droplets * uDropletOpacity);
+    color += reflection;
+    color += wetHighlight;
+    color += vec3(0.82, 0.95, 1.0) * frostBloom;
+    float alpha = clamp(film * uFilmOpacity + droplets * uDropletOpacity + wetResidue * 0.12 + frostBloom * 0.22, 0.0, 0.92);
+    gl_FragColor = vec4(color, alpha);
   }
 `;
