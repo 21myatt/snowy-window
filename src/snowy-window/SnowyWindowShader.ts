@@ -23,8 +23,7 @@ export const snowyWindowFragmentShader = `
   uniform float uTrailStrength;
   uniform vec2 uResolution;
   uniform sampler2D uMask;
-  uniform vec4 uFrostBloom;
-  uniform float uFrostBloomStrength;
+
 
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -51,23 +50,16 @@ export const snowyWindowFragmentShader = `
 
   void main() {
     vec2 p = vUv;
+    vec2 glassUv = vec2(p.x, p.y * uResolution.y / uResolution.x);
     vec4 maskSample = texture2D(uMask, p);
     float condensation = maskSample.r;
     float wetResidue = maskSample.g;
-    float bloomAge = uTime - uFrostBloom.z;
-    float bloomActive = step(0.0, bloomAge) * (1.0 - smoothstep(0.55, 0.7, bloomAge)) * uFrostBloomStrength;
-    float bloomDistance = distance(p, uFrostBloom.xy);
-    float bloomRadius = bloomAge * 0.42;
-    float bloomNoise = fbm(p * 42.0 + vec2(uFrostBloom.z * 0.7, -uFrostBloom.z * 0.4));
-    float bloomCircle = 1.0 - smoothstep(uFrostBloom.w * 0.72, uFrostBloom.w, bloomDistance);
-    float bloomTexture = smoothstep(0.42, 0.74, bloomNoise + bloomAge * 0.18);
-    float bloomRing = (1.0 - smoothstep(0.0, 0.035, abs(bloomDistance - bloomRadius)))
-      * smoothstep(0.0, 0.08, bloomAge)
-      * (1.0 - smoothstep(0.18, 0.42, bloomAge));
-    float frostBloom = bloomCircle * bloomTexture * bloomActive * 0.28 + bloomRing * bloomActive;
-    float large = fbm(p * uNoiseScale);
+    float age = max(0.0, uTime - maskSample.b);
+    float freshIce = maskSample.a * exp(-age * 2.4) * step(-0.5, maskSample.b);
+    float maturity = smoothstep(0.0, 4.0, age);
+    float large = fbm(glassUv * uNoiseScale);
     float medium = fbm(p * uDropletScale * 0.42);
-    float fine = fbm(vec2(p.x * uDropletScale, p.y * uDropletScale * uDropletStretch));
+    float fine = fbm(vec2(glassUv.x * uDropletScale, glassUv.y * uDropletScale * uDropletStretch));
     float filmNoise = large * 0.55 + medium * 0.30 + fine * 0.15;
     float film = condensation * smoothstep(0.10, 0.72, filmNoise + condensation * 0.35);
     float droplets = condensation * smoothstep(0.48, 0.73, fine + medium * 0.28 + condensation * 0.34);
@@ -104,8 +96,9 @@ export const snowyWindowFragmentShader = `
     color = mix(color, dropletColor, droplets * uDropletOpacity);
     color += reflection;
     color += wetHighlight;
-    color += vec3(0.82, 0.95, 1.0) * frostBloom;
-    float alpha = clamp(film * uFilmOpacity + droplets * uDropletOpacity + wetResidue * 0.12 + frostBloom * 0.22, 0.0, 0.92);
+    color = mix(color * vec3(0.88, 0.95, 1.0), color, maturity);
+    color += vec3(0.55, 0.78, 0.9) * freshIce * 0.55;
+    float alpha = clamp(film * uFilmOpacity + droplets * uDropletOpacity + wetResidue * 0.12 + freshIce * 0.24, 0.0, 0.92);
     gl_FragColor = vec4(color, alpha);
   }
 `;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extendedFingerIndices, faceToUv, handBrushes, mouthBrush, palmCenter, SnowyWindowInteractionEngine, toUv } from "./SnowyWindowInteraction";
+import { extendedFingerIndices, handBrushes, palmCenter, SnowyWindowInteractionEngine, toUv } from "./SnowyWindowInteraction";
 
 describe("snowy window interaction mapping", () => {
   it("converts top-left tracking coordinates to shader UV coordinates", () => {
@@ -7,10 +7,6 @@ describe("snowy window interaction mapping", () => {
     expect(toUv({ x: -1, y: 2 })).toEqual({ x: 0, y: 1 });
   });
 
-  it("converts face landmarks from top-left normalized space to bottom-left UV space", () => {
-    expect(faceToUv({ x: 0.25, y: 0.2 })).toEqual({ x: 0.25, y: 0.8 });
-    expect(faceToUv({ x: 0.5, y: 0.5 })).toEqual({ x: 0.5, y: 0.5 });
-  });
 
   it("creates one broad palm wipe and one second-fingertip wipe per hand", () => {
     const hand = Array.from({ length: 21 }, (_, index) => ({ x: index / 20, y: index / 20 }));
@@ -48,7 +44,7 @@ describe("snowy window interaction mapping", () => {
     })).toHaveLength(0);
   });
 
-  it("interpolates a continuous trail while the same hand state moves", () => {
+  it("sweeps one capsule while the same hand state moves", () => {
     const engine = new SnowyWindowInteractionEngine({
       boundingBoxRadius: 0.13, palmRadiusMultiplier: 1.25, fingertipRadius: 0.05,
       singleFingerExtensionRatio: 1.12, strength: -1,
@@ -56,9 +52,12 @@ describe("snowy window interaction mapping", () => {
     const first = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
     first[8] = { x: 0, y: 1 }; first[6] = { x: 0, y: 0.5 };
     const second = first.map((point) => ({ ...point }));
-    second[8] = { x: 1, y: 1 };
+    second[8] = { x: 0.4, y: 1 };
     expect(engine.createHandBrushes([first], ["closed_fist"])).toHaveLength(1);
-    expect(engine.createHandBrushes([second], ["closed_fist"]).length).toBeGreaterThan(1);
+    const stroke = engine.createHandBrushes([second], ["closed_fist"]);
+    expect(stroke).toHaveLength(1);
+    expect(stroke[0].from).toEqual({ x: 0.5, y: 1 });
+    expect(stroke[0].x).toBe(0.7);
   });
 
   it("centers the palm brush on wrist and MCP joints, not fingertip extension", () => {
@@ -70,9 +69,4 @@ describe("snowy window interaction mapping", () => {
     expect(center?.y).toBeCloseTo(-0.12);
   });
 
-  it("refills only while the mouth is open and a mouth point exists", () => {
-    expect(mouthBrush({ x: 0.4, y: 0.3 }, true, 0.1, 0.7)).toHaveLength(1);
-    expect(mouthBrush({ x: 0.4, y: 0.3 }, false, 0.1, 0.7)).toHaveLength(0);
-    expect(mouthBrush(null, true, 0.1, 0.7)).toHaveLength(0);
-  });
 });

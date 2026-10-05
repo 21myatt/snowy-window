@@ -1,5 +1,5 @@
 export type Point = { x: number; y: number };
-export type Brush = Point & { radius: number; strength: number; mode: "wipe" | "refill"; velocity?: Point };
+export type Brush = Point & { radius: number; strength: number; mode: "wipe" | "refill"; velocity?: Point; from?: Point };
 export type HandBounds = { minX: number; minY: number; maxX: number; maxY: number };
 export type HandGesture = "open_palm" | "closed_fist" | string | undefined;
 export type HandPoseState = "palm" | `finger:${number}` | "none";
@@ -12,12 +12,6 @@ export const toUv = (point: Point): Point => ({
   // Shader UVs have their origin at the bottom; the SDK hand point uses NDC
   // with +y up, so this keeps the tracked point visually aligned.
   y: clamp((point.y + 1) / 2),
-});
-
-/** Face landmarks are normalized 0..1 with a top-left origin. */
-export const faceToUv = (point: Point): Point => ({
-  x: clamp(point.x),
-  y: clamp(1 - point.y),
 });
 
 export const palmCenter = (hand: Point[]): Point | null => {
@@ -70,13 +64,6 @@ export const handBrushes = (
   return result;
 };
 
-export const mouthBrush = (
-  mouth: Point | null,
-  open: boolean,
-  radius: number,
-  strength: number,
-): Brush[] => (mouth && open ? [{ ...faceToUv(mouth), radius, strength, mode: "refill" }] : []);
-
 /** Object-oriented boundary for the interaction domain; React only adapts SDK data into it. */
 export class SnowyWindowInteractionEngine {
   private readonly previous = new Map<number, { state: HandPoseState; point: Point }>();
@@ -100,12 +87,9 @@ export class SnowyWindowInteractionEngine {
       const previous = this.previous.get(handIndex);
       if (previous && previous.state === state) {
         const distanceBetween = Math.hypot(current.x - previous.point.x, current.y - previous.point.y);
-        const steps = Math.max(1, Math.ceil(distanceBetween / Math.max(current.radius * 0.6, 0.002)));
         const velocity = { x: current.x - previous.point.x, y: current.y - previous.point.y };
-        for (let step = 1; step <= steps; step += 1) {
-          const amount = step / steps;
-          brushes.push({ ...current, x: previous.point.x + velocity.x * amount, y: previous.point.y + velocity.y * amount, velocity });
-        }
+        // A capsule represents the entire stroke once. Reject jumps from reacquisition.
+        brushes.push({ ...current, from: distanceBetween < 0.35 ? previous.point : undefined, velocity });
       } else {
         brushes.push(current);
       }
@@ -117,10 +101,4 @@ export class SnowyWindowInteractionEngine {
     return brushes;
   }
 
-  // The class owns both interaction paths; this method intentionally delegates
-  // to the stateless mouth mapping while preserving one feature boundary.
-  // eslint-disable-next-line class-methods-use-this
-  createMouthBrush(mouth: Point | null, open: boolean, radius: number, strength: number): Brush[] {
-    return mouthBrush(mouth, open, radius, strength);
-  }
 }

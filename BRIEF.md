@@ -18,7 +18,7 @@ EXPECTED :
 - snowy condensation webgl shaders will have true condensation animation like condensation start at random one point and slows filling the whole screen
 - Hand Tracking Boudning box will act like mouse cursor or wipping, user show hand to wipe the webgl condensation shaders in the ranges
 - Finger tips hand landmarks will also act like mouse cursor or wipping, user show hand to wipe the webgl condensation shaders in its finger tips area ranges
-- Mouse Open will act like filling the webgl condensation shaders in the areas of moues open
+<!-- - Mouse Open will act like filling the webgl condensation shaders in the areas of moues open , like some snow or wind are coming out from the mouth and fiil the wipped area with shaders -->
 - After all should write in creator zone accorind to check zone mjs.
 
 CODE PRACTICE :
