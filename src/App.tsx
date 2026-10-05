@@ -18,7 +18,6 @@ import { PreviewAnchors } from "./PreviewAnchors";
 import { announcedPresets, chooseMediaSource, isFramed, pickFramedDefault } from "./framed";
 import type { MediaSourceEnv } from "./framed";
 import { streamFromImageUrl, streamFromVideoUrl } from "./mediaStream";
-import { MediaSourceControl } from "./MediaSourceControl";
 import type { MediaPreset } from "./MediaSourceControl";
 
 // Fallback clip for the "video" source when no VITE_INPUT_URL is supplied.
@@ -176,11 +175,6 @@ export const Shell = () => {
   const reason = useXRError()?.reason;
   const { session } = useXRContext();
 
-  // The app owns the selected source; the switcher only renders it. That is what
-  // makes the framed default APPEAR SELECTED instead of the control claiming
-  // "Webcam" while a preset plays.
-  const [selected, setSelected] = useState<MediaPreset | null>(null);
-
   // Held freezes the PICTURE, not the experience. The whole visible composite is
   // one canvas — the clip plays into an offscreen canvas, is captureStream()-ed,
   // and the SDK blits it into a texture drawn INSIDE this r3f scene — so halting
@@ -205,7 +199,6 @@ export const Shell = () => {
       // one-frame-behind-the-freeze this ordering exists to prevent. Flushing
       // commits the released frameloop before the swap is started.
       flushSync(() => setPaused(false));
-      setSelected(next);
       const apply = async () => {
         if (next.kind === "webcam") {
           await session.setMediaSource({ source: XRMediaSource.WEBCAM });
@@ -300,7 +293,7 @@ export const Shell = () => {
         // `canvasProps`, which would drop the freeze.
         canvasProps={{ frameloop: paused ? "never" : "always" }}
       >
-        <MediaSourceBinder onSourceSelected={setSelected} />
+        <MediaSourceBinder />
         <PerspectiveCamera makeDefault position={[0, 0, 5]} fov={45} />
         <VideoBackground
           segmentationMask={undefined}
@@ -312,7 +305,6 @@ export const Shell = () => {
         <Scene />
         <PreviewAnchors />
       </XRScene>
-      <MediaSourceControl value={selected} onChange={applySource} />
     </AspectRatioContainer>
   );
 };

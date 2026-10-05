@@ -23,6 +23,17 @@ describe("persistent crystalline growth", () => {
     expect(s.getPixel(0, 0).condensation).toBeCloseTo(0.78);
   });
 
+  it("draws persistent frost that remains until wiped", () => {
+    const s = new CrystalGrowthSimulation(0, 64, 64);
+    const frost = { x: 0.5, y: 0.5, radius: 0.2, strength: 1, mode: "refill" as const };
+    s.update(1 / 60, [frost], config);
+    expect(s.getPixel(32, 32).frozen).toBe(1);
+    s.update(1 / 60, [], config);
+    expect(s.getPixel(32, 32).frozen).toBe(1);
+    for (let i = 0; i < 20; i += 1) s.update(1 / 60, [brush], config);
+    expect(s.getPixel(32, 32).frozen).toBe(0);
+  });
+
   it("clears the whole swept path, not only its endpoints", () => {
     const s = new CrystalGrowthSimulation(0.78, 64, 64);
     s.update(1 / 60, [{ ...brush, x: 0.8, from: { x: 0.2, y: 0.5 }, radius: 0.08 }], config);

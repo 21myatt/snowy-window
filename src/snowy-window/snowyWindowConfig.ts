@@ -24,7 +24,13 @@ export const SNOWY_WINDOW_CONFIG = {
     boundingBoxRadius: 0.075,
     palmRadiusMultiplier: 2.8,
     fingertipRadius: 0.055,
+    pinchDistance: 0.12,
     singleFingerExtensionRatio: 1.12,
+    frostStrength: 1,
+  },
+  face: {
+    breathRadius: 0.13,
+    breathStrength: 0.9,
   },
   autoRefill: {
     growthRate: 3.6,

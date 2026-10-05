@@ -1,7 +1,6 @@
-# v2-template
+# Snowy Window
 
-The Vincentt starter app: a real React + R3F + Vincentt XR SDK (`@vincentt-xr/sdk`)
-WebXR app, bundled by esbuild.
+An interactive Vincentt XR template where users wipe condensation, clear the window with their breath, and draw persistent frost with a pinch gesture.
 
 ## Shape
 

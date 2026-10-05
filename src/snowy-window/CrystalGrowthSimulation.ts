@@ -105,6 +105,26 @@ export class CrystalGrowthSimulation {
           contact = Math.max(contact, influence * Math.abs(brush.strength) * (dt + travel * 0.12));
           rim = Math.max(rim, Math.exp(-(((r - 0.93) / 0.12) ** 2)) * Math.min(1, travel));
         }
+        const frost = brushes.some((brush) => {
+          if (brush.mode !== "refill") return false;
+          const aspect = this.height / this.width;
+          const ax = brush.from?.x ?? brush.x;
+          const ay = (brush.from?.y ?? brush.y) * aspect;
+          const dx = brush.x - ax;
+          const dy = brush.y * aspect - ay;
+          const px = (x + 0.5) / this.width - ax;
+          const py = (y + 0.5) / this.height * aspect - ay;
+          const length2 = dx * dx + dy * dy;
+          const t = length2 > 0 ? Math.max(0, Math.min(1, (px * dx + py * dy) / length2)) : 0;
+          return Math.hypot(px - dx * t, py - dy * t) / brush.radius < 1;
+        });
+        if (frost) {
+          this.pixels[i] = this.settledDensity;
+          this.pixels[i + 2] = this.time;
+          this.pixels[i + 3] = 1;
+          this.hold[pixel] = config.wipeGrowthDelay;
+          continue;
+        }
         if (contact > 0) {
           const removed = Math.min(this.pixels[i], contact * config.wipeStrength);
           this.pixels[i] -= removed;

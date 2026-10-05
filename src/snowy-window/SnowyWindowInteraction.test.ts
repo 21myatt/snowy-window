@@ -44,6 +44,20 @@ describe("snowy window interaction mapping", () => {
     })).toHaveLength(0);
   });
 
+  it("creates a persistent refill brush at the thumb-index pinch midpoint", () => {
+    const hand = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
+    hand[4] = { x: 0.18, y: 0.5 };
+    hand[8] = { x: 0.24, y: 0.5 };
+    const brushes = handBrushes([hand], ["closed_fist"], {
+      boundingBoxRadius: 0.13, palmRadiusMultiplier: 1.25, fingertipRadius: 0.05,
+      singleFingerExtensionRatio: 1.12, pinchDistance: 0.12, frostStrength: 1, strength: -1,
+    });
+    expect(brushes).toHaveLength(1);
+    expect(brushes[0].mode).toBe("refill");
+    expect(brushes[0].x).toBeCloseTo(0.605);
+    expect(brushes[0].y).toBeCloseTo(0.75);
+  });
+
   it("sweeps one capsule while the same hand state moves", () => {
     const engine = new SnowyWindowInteractionEngine({
       boundingBoxRadius: 0.13, palmRadiusMultiplier: 1.25, fingertipRadius: 0.05,

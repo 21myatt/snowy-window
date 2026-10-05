@@ -2,7 +2,7 @@ export type Point = { x: number; y: number };
 export type Brush = Point & { radius: number; strength: number; mode: "wipe" | "refill"; velocity?: Point; from?: Point };
 export type HandBounds = { minX: number; minY: number; maxX: number; maxY: number };
 export type HandGesture = "open_palm" | "closed_fist" | string | undefined;
-export type HandPoseState = "palm" | `finger:${number}` | "none";
+export type HandPoseState = "palm" | "pinch" | `finger:${number}` | "none";
 
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
 
@@ -29,6 +29,15 @@ const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 const FINGERTIPS = [4, 8, 12, 16, 20] as const;
 const FINGER_JOINTS = [3, 6, 10, 14, 18] as const;
 
+export const isPinching = (hand: Point[], threshold: number): boolean => {
+  const thumb = hand[4];
+  const index = hand[8];
+  const gap = thumb && index ? distance(thumb, index) : Infinity;
+  // A zero-distance synthetic pose is an ambiguous collapsed hand, not a
+  // usable pinch contact. Real tracking retains a small thumb/index gap.
+  return Boolean(thumb && index && gap > 0.005 && gap <= threshold);
+};
+
 export const extendedFingerIndices = (hand: Point[], ratio: number): number[] => {
   const wrist = hand[0];
   if (!wrist) return [];
@@ -39,8 +48,9 @@ export const extendedFingerIndices = (hand: Point[], ratio: number): number[] =>
   });
 };
 
-export const classifyHand = (hand: Point[], gesture: HandGesture, ratio: number): HandPoseState => {
+export const classifyHand = (hand: Point[], gesture: HandGesture, ratio: number, pinchDistance = 0.12): HandPoseState => {
   if (gesture?.toLowerCase() === "open_palm") return "palm";
+  if (isPinching(hand, pinchDistance)) return "pinch";
   const extended = extendedFingerIndices(hand, ratio);
   return extended.length === 1 ? `finger:${extended[0]}` : "none";
 };
@@ -48,14 +58,18 @@ export const classifyHand = (hand: Point[], gesture: HandGesture, ratio: number)
 export const handBrushes = (
   hands: Point[][],
   gestures: HandGesture[],
-  config: { boundingBoxRadius: number; palmRadiusMultiplier: number; fingertipRadius: number; singleFingerExtensionRatio: number; strength: number; brushSoftness?: number },
+  config: { boundingBoxRadius: number; palmRadiusMultiplier: number; fingertipRadius: number; singleFingerExtensionRatio: number; strength: number; pinchDistance?: number; frostStrength?: number; brushSoftness?: number },
 ): Brush[] => {
-  const result: Brush[] = hands.flatMap((hand, handIndex) => {
+  const result: Brush[] = hands.flatMap((hand, handIndex): Brush[] => {
     const center = palmCenter(hand);
     if (!center) return [];
-    const state = classifyHand(hand, gestures[handIndex], config.singleFingerExtensionRatio);
+    const state = classifyHand(hand, gestures[handIndex], config.singleFingerExtensionRatio, config.pinchDistance);
     if (state === "palm") {
       return [{ ...toUv(center), radius: config.boundingBoxRadius * config.palmRadiusMultiplier, strength: config.strength, mode: "wipe" as const }];
+    }
+    if (state === "pinch") {
+      const pinch = { x: (hand[4].x + hand[8].x) / 2, y: (hand[4].y + hand[8].y) / 2 };
+      return [{ ...toUv(pinch), radius: config.fingertipRadius, strength: config.frostStrength ?? 1, mode: "refill" as const }];
     }
     if (state === "none") return [];
     const tip = hand[Number(state.slice("finger:".length))];
@@ -68,13 +82,13 @@ export const handBrushes = (
 export class SnowyWindowInteractionEngine {
   private readonly previous = new Map<number, { state: HandPoseState; point: Point }>();
 
-  constructor(private readonly config: { boundingBoxRadius: number; palmRadiusMultiplier: number; fingertipRadius: number; singleFingerExtensionRatio: number; strength: number; brushSoftness?: number }) {}
+  constructor(private readonly config: { boundingBoxRadius: number; palmRadiusMultiplier: number; fingertipRadius: number; singleFingerExtensionRatio: number; strength: number; pinchDistance?: number; frostStrength?: number; brushSoftness?: number }) {}
 
   createHandBrushes(hands: Point[][], gestures: HandGesture[]): Brush[] {
     const brushes: Brush[] = [];
     hands.forEach((hand, handIndex) => {
       const center = palmCenter(hand);
-      const state = classifyHand(hand, gestures[handIndex], this.config.singleFingerExtensionRatio);
+      const state = classifyHand(hand, gestures[handIndex], this.config.singleFingerExtensionRatio, this.config.pinchDistance);
       if (!center || state === "none") {
         this.previous.delete(handIndex);
         return;
