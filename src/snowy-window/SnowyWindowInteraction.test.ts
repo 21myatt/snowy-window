@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { handBrushes, mouthBrush, palmCenter, toUv } from "./SnowyWindowInteraction";
+import { extendedFingerIndices, handBrushes, mouthBrush, palmCenter, toUv } from "./SnowyWindowInteraction";
 
 describe("snowy window interaction mapping", () => {
   it("converts top-left tracking coordinates to shader UV coordinates", () => {
@@ -9,13 +9,38 @@ describe("snowy window interaction mapping", () => {
 
   it("creates one broad palm wipe and one second-fingertip wipe per hand", () => {
     const hand = Array.from({ length: 21 }, (_, index) => ({ x: index / 20, y: index / 20 }));
-    const brushes = handBrushes([hand], [{ minX: 0.1, minY: 0.2, maxX: 0.5, maxY: 0.8 }], {
+    const brushes = handBrushes([hand], ["open_palm"], {
       boundingBoxRadius: 0.13,
+      palmRadiusMultiplier: 1.25,
       fingertipRadius: 0.05,
+      singleFingerExtensionRatio: 1.12,
       strength: -1,
     });
-    expect(brushes).toHaveLength(2);
+    expect(brushes).toHaveLength(1);
     expect(brushes.every((brush) => brush.mode === "wipe")).toBe(true);
+  });
+
+  it("activates only the one extended finger when the palm is not open", () => {
+    const hand = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
+    hand[0] = { x: 0, y: 0 };
+    hand[8] = { x: 0, y: 1 }; hand[6] = { x: 0, y: 0.5 };
+    const brushes = handBrushes([hand], ["closed_fist"], {
+      boundingBoxRadius: 0.13, palmRadiusMultiplier: 1.25, fingertipRadius: 0.05,
+      singleFingerExtensionRatio: 1.12, strength: -1,
+    });
+    expect(extendedFingerIndices(hand, 1.12)).toEqual([8]);
+    expect(brushes).toHaveLength(1);
+    expect(brushes[0].radius).toBe(0.05);
+  });
+
+  it("does not wipe for ambiguous multi-finger poses", () => {
+    const hand = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
+    [4, 8].forEach((tip) => { hand[tip] = { x: 0, y: 1 }; });
+    [3, 6].forEach((joint) => { hand[joint] = { x: 0, y: 0.5 }; });
+    expect(handBrushes([hand], ["closed_fist"], {
+      boundingBoxRadius: 0.13, palmRadiusMultiplier: 1.25, fingertipRadius: 0.05,
+      singleFingerExtensionRatio: 1.12, strength: -1,
+    })).toHaveLength(0);
   });
 
   it("centers the palm brush on wrist and MCP joints, not fingertip extension", () => {

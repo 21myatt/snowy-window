@@ -33,16 +33,14 @@ export const SnowyWindowExperience = () => {
       handedness: hand.handedness,
     }));
     const hands = trackedHands
-      .filter((hand) => hand.gesture?.toLowerCase() === "open_palm")
       .map((hand) => hand.points?.map(({ x, y }) => ({ x, y })))
       .filter((hand): hand is Point[] => Boolean(hand));
-    const bounds = hands.map((hand) => ({ minX: Math.min(...hand.map((p) => p.x)), minY: Math.min(...hand.map((p) => p.y)), maxX: Math.max(...hand.map((p) => p.x)), maxY: Math.max(...hand.map((p) => p.y)) }));
     const currentFace = faceRef.current;
     const mouthIndex = FACE_LANDMARK_INDICES["face.mouthCenter"];
     const mouthPoint = currentFace?.landmarks[mouthIndex];
     const open = Boolean(currentFace && getFaceBlendshape(currentFace, "jawOpen") >= SNOWY_WINDOW_CONFIG.mouth.jawOpenThreshold);
     const brushes: Brush[] = [
-      ...interactionEngine.createHandBrushes(hands, bounds),
+      ...interactionEngine.createHandBrushes(hands, trackedHands.map((hand) => hand.gesture)),
       ...interactionEngine.createMouthBrush(mouthPoint ?? null, open, SNOWY_WINDOW_CONFIG.mouth.refillRadius, SNOWY_WINDOW_CONFIG.condensation.mouthRefillStrength),
     ].slice(0, MAX_BRUSHES);
     simulation.update(1 / SNOWY_WINDOW_CONFIG.tracking.targetFps, clock.elapsedTime, brushes, {
@@ -55,7 +53,7 @@ export const SnowyWindowExperience = () => {
       // Required runtime diagnostics; throttled to two messages per second.
       // eslint-disable-next-line no-console
       console.log("[snowy-window] tracking", {
-        palmHands: hands.length,
+        palmHands: trackedHands.filter((hand) => hand.gesture?.toLowerCase() === "open_palm").length,
         palmStates: trackedHands.map((hand) => ({ handedness: hand.handedness ?? "unknown", gesture: hand.gesture ?? "none" })),
         secondFingertip: hands.map((hand) => hand[8] ?? null),
         mouthOpen: open,

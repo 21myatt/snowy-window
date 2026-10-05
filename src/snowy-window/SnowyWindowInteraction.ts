@@ -1,6 +1,7 @@
 export type Point = { x: number; y: number };
 export type Brush = Point & { radius: number; strength: number; mode: "wipe" | "refill" };
 export type HandBounds = { minX: number; minY: number; maxX: number; maxY: number };
+export type HandGesture = "open_palm" | "closed_fist" | string | undefined;
 
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
 
@@ -23,28 +24,36 @@ export const palmCenter = (hand: Point[]): Point | null => {
   };
 };
 
+const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+const FINGERTIPS = [4, 8, 12, 16, 20] as const;
+const FINGER_JOINTS = [3, 6, 10, 14, 18] as const;
+
+export const extendedFingerIndices = (hand: Point[], ratio: number): number[] => {
+  const wrist = hand[0];
+  if (!wrist) return [];
+  return FINGERTIPS.filter((tipIndex, fingerIndex) => {
+    const tip = hand[tipIndex];
+    const joint = hand[FINGER_JOINTS[fingerIndex]];
+    return Boolean(tip && joint && distance(tip, wrist) > distance(joint, wrist) * ratio);
+  });
+};
+
 export const handBrushes = (
   hands: Point[][],
-  bounds: Array<{ minX: number; minY: number; maxX: number; maxY: number }>,
-  config: { boundingBoxRadius: number; fingertipRadius: number; strength: number },
+  gestures: HandGesture[],
+  config: { boundingBoxRadius: number; palmRadiusMultiplier: number; fingertipRadius: number; singleFingerExtensionRatio: number; strength: number },
 ): Brush[] => {
   const result: Brush[] = hands.flatMap((hand, handIndex) => {
     const center = palmCenter(hand);
     if (!center) return [];
-    // The bounds keep the broad brush tied to the detected hand; the center is
-    // deliberately computed from palm joints so extended fingers cannot pull it.
-    const box = bounds[handIndex];
-    return [{
-      ...toUv(center),
-      radius: config.boundingBoxRadius * (box ? 1 : 0.8),
-      strength: config.strength,
-      mode: "wipe" as const,
-    }];
-  });
-  hands.forEach((hand) => {
-    // Only the second fingertip in the brief: MediaPipe index-finger tip = 8.
-    const secondFingertip = hand[8];
-    if (secondFingertip) result.push({ ...toUv(secondFingertip), radius: config.fingertipRadius, strength: config.strength, mode: "wipe" });
+    const gesture = gestures[handIndex]?.toLowerCase();
+    if (gesture === "open_palm") {
+      return [{ ...toUv(center), radius: config.boundingBoxRadius * config.palmRadiusMultiplier, strength: config.strength, mode: "wipe" as const }];
+    }
+    const extended = extendedFingerIndices(hand, config.singleFingerExtensionRatio);
+    if (extended.length !== 1) return [];
+    const tip = hand[extended[0]];
+    return tip ? [{ ...toUv(tip), radius: config.fingertipRadius, strength: config.strength, mode: "wipe" as const }] : [];
   });
   return result;
 };
@@ -58,10 +67,10 @@ export const mouthBrush = (
 
 /** Object-oriented boundary for the interaction domain; React only adapts SDK data into it. */
 export class SnowyWindowInteractionEngine {
-  constructor(private readonly config: { boundingBoxRadius: number; fingertipRadius: number; strength: number }) {}
+  constructor(private readonly config: { boundingBoxRadius: number; palmRadiusMultiplier: number; fingertipRadius: number; singleFingerExtensionRatio: number; strength: number }) {}
 
-  createHandBrushes(hands: Point[][], bounds: HandBounds[]): Brush[] {
-    return handBrushes(hands, bounds, this.config);
+  createHandBrushes(hands: Point[][], gestures: HandGesture[]): Brush[] {
+    return handBrushes(hands, gestures, this.config);
   }
 
   // The class owns both interaction paths; this method intentionally delegates
